@@ -49,5 +49,5 @@ evaluation:
 
 # Output settings
 output:
-  format: opencode  # "opencode" for now, more formats later
+  format: opencode  # "opencode", "json", "yaml", or "markdown"
   directory: .opencode/skills

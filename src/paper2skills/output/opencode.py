@@ -2,41 +2,83 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from rich.console import Console
 
 from ..generate.generator import GeneratedSkill
+from .base import BaseOutputFormatter
 
 console = Console(stderr=True)
 
 
-def write_skills(
-    skills: list[GeneratedSkill],
-    output_dir: Path,
-) -> list[Path]:
+class OpencodeFormatter(BaseOutputFormatter):
+    """Writes skills as OpenCode SKILL.md files (one per skill in subdirectories)."""
+
+    @property
+    def format_name(self) -> str:
+        return "opencode"
+
+    @property
+    def file_extension(self) -> str:
+        return ".md"
+
+    def format_skill(self, skill: GeneratedSkill) -> str:
+        """Format a single skill as a SKILL.md string."""
+        return skill.to_skill_md()
+
+    def format_all(self, skills: list[GeneratedSkill]) -> str:
+        """Format all skills, separated by newlines.
+
+        Note: for opencode format, skills are usually written to separate files.
+        This method concatenates them with separators for preview purposes.
+        """
+        parts = [skill.to_skill_md() for skill in skills]
+        return "\n---\n\n".join(parts)
+
+    def write_skills(
+        self,
+        skills: list[GeneratedSkill],
+        output_dir: Path,
+    ) -> list[Path]:
+        """Write generated skills as OpenCode SKILL.md files.
+
+        Creates the directory structure:
+          output_dir/<skill-name>/SKILL.md
+
+        Returns list of paths to written files.
+        """
+        written: list[Path] = []
+
+        for skill in skills:
+            skill_dir = output_dir / skill.name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+
+            skill_path = skill_dir / "SKILL.md"
+            content = skill.to_skill_md()
+
+            skill_path.write_text(content, encoding="utf-8")
+            written.append(skill_path)
+
+            console.print(f"  Wrote: [green]{skill_path}[/green]")
+
+        return written
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible free functions
+# ---------------------------------------------------------------------------
+
+_formatter = OpencodeFormatter()
+
+
+def write_skills(skills: list[GeneratedSkill], output_dir: Path) -> list[Path]:
     """Write generated skills as OpenCode SKILL.md files.
 
-    Creates the directory structure:
-      output_dir/<skill-name>/SKILL.md
-
-    Returns list of paths to written files.
+    Backward-compatible wrapper around OpencodeFormatter.write_skills().
     """
-    written: list[Path] = []
-
-    for skill in skills:
-        skill_dir = output_dir / skill.name
-        skill_dir.mkdir(parents=True, exist_ok=True)
-
-        skill_path = skill_dir / "SKILL.md"
-        content = skill.to_skill_md()
-
-        skill_path.write_text(content, encoding="utf-8")
-        written.append(skill_path)
-
-        console.print(f"  Wrote: [green]{skill_path}[/green]")
-
-    return written
+    return _formatter.write_skills(skills, output_dir)
 
 
 def read_existing_skills(skills_dir: Path) -> list[GeneratedSkill]:
@@ -44,8 +86,6 @@ def read_existing_skills(skills_dir: Path) -> list[GeneratedSkill]:
 
     Parses the frontmatter and body of each SKILL.md file.
     """
-    import re
-
     skills: list[GeneratedSkill] = []
 
     if not skills_dir.exists():

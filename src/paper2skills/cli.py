@@ -155,32 +155,53 @@ def generate(
         "--prompt-template",
         help="Path to a custom prompt template file (overrides system prompt)",
     ),
+    format: Optional[str] = typer.Option(
+        None,
+        "--format",
+        "-f",
+        help="Output format: 'opencode' (default), 'json', 'yaml', or 'markdown'",
+    ),
 ):
     """Generate SKILL.md files from one or more research papers."""
     from .ingest.router import ingest_paper
     from .generate.generator import generate_skills
-    from .output.opencode import write_skills, read_existing_skills
+    from .output import get_formatter, FORMATS
+    from .output.opencode import (
+        write_skills as write_opencode_skills,
+        read_existing_skills,
+    )
     from .evaluate.evaluator import evaluate_skills
     from .evaluate.merger import merge_into_existing, detect_overlaps
     from .profiles import get_profile, DEFAULT_AUDIENCE
 
     provider = _resolve_provider(provider, config_path)
     llm = _get_provider(provider, model, config_path)
-    audience = audience or _get_config(config_path).audience or DEFAULT_AUDIENCE
+    cfg = _get_config(config_path)
+    audience = audience or cfg.audience or DEFAULT_AUDIENCE
 
     # Resolve prompt template: CLI flag > config > None
-    cfg = _get_config(config_path)
     tpl_path = str(prompt_template) if prompt_template else cfg.prompt_template or None
+
+    # Resolve output format: CLI flag > config > "opencode"
+    fmt_name = format or cfg.output.format or "opencode"
+    if fmt_name not in FORMATS:
+        typer.echo(
+            f"Unknown format: '{fmt_name}'. Valid formats: {', '.join(FORMATS)}",
+            err=True,
+        )
+        raise typer.Exit(1)
+    formatter = get_formatter(fmt_name)
 
     # Validate audience early
     profile = get_profile(audience)
 
     tpl_info = f" | Template: [cyan]{tpl_path}[/cyan]" if tpl_path else ""
+    fmt_info = f" | Format: [cyan]{fmt_name}[/cyan]" if fmt_name != "opencode" else ""
     console.print(
         Panel(
             f"[bold]paper2skills[/bold] v{__version__}\n"
             f"Provider: [cyan]{provider}[/cyan] | Model: [cyan]{llm.model_name}[/cyan]\n"
-            f"Audience: [cyan]{profile.label}[/cyan]{tpl_info}\n"
+            f"Audience: [cyan]{profile.label}[/cyan]{tpl_info}{fmt_info}\n"
             f"Sources: {len(sources)} | Max skills/paper: {max_skills}",
             title="Generate",
         )
@@ -216,6 +237,7 @@ def generate(
     console.print(f"\n[bold]Total skills generated: {len(all_skills)}[/bold]")
 
     # Phase 2: Merge into existing (if requested)
+    # Merging always uses opencode format (reads/writes SKILL.md)
     if merge_into:
         console.print(f"\n[bold]Merging into:[/bold] {merge_into}")
         existing = read_existing_skills(merge_into)
@@ -227,18 +249,18 @@ def generate(
 
             # Write merged skills (overwrite existing)
             if merged:
-                write_skills(merged, merge_into)
+                write_opencode_skills(merged, merge_into)
             # Write novel skills
             if novel:
-                write_skills(novel, merge_into)
+                write_opencode_skills(novel, merge_into)
 
             all_skills = merged + novel
         else:
             # No existing skills, just write all
-            write_skills(all_skills, merge_into)
+            write_opencode_skills(all_skills, merge_into)
     else:
-        # Write to output directory
-        write_skills(all_skills, output_dir)
+        # Write to output directory using the selected formatter
+        formatter.write_skills(all_skills, output_dir)
 
     # Phase 3: Evaluate (if requested)
     if evaluate and all_skills:
