@@ -3,6 +3,10 @@
 
 provider: github  # "github", "copilot", "openai", or "litellm"
 
+# Target audience — changes how skills are extracted and evaluated
+# Options: "coding-agent" (default), "researcher", "general"
+audience: coding-agent
+
 # GitHub Models API (models.github.ai) — free tier with GitHub PAT
 github:
   model: openai/gpt-4o

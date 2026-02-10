@@ -1,14 +1,21 @@
 """Prompt templates for skill generation."""
 
-SYSTEM_PROMPT = """\
-You are an expert at distilling research papers into actionable, concise skill \
-definitions for AI coding agents. Your output must be practical instructions that \
-an AI coding agent can follow — NOT academic summaries.
+from __future__ import annotations
 
-A "skill" is a reusable set of instructions that teaches an AI agent how to \
-apply a specific technique from a research paper when coding. Skills are loaded \
-on-demand: an agent sees the skill name and description, then decides whether to \
-load the full content.
+from typing import Optional
+
+from ..profiles import AudienceProfile, get_profile, DEFAULT_AUDIENCE
+
+# ---------------------------------------------------------------------------
+# System prompt — assembled from profile fragments
+# ---------------------------------------------------------------------------
+
+_SYSTEM_TEMPLATE = """\
+You are an expert at distilling research papers into actionable, concise skill \
+definitions for {audience_label}. Your output must be practical instructions that \
+{audience_preposition} can follow — NOT academic summaries.
+
+{skill_definition}
 
 ## Output Format
 
@@ -18,49 +25,28 @@ containing exactly `---SKILL_SEPARATOR---`. Each skill has this structure:
 ```
 ---
 name: lowercase-hyphenated-name
-description: One-line description (under 200 chars) that tells the agent WHEN to use this skill
+description: One-line description (under 200 chars) that tells the reader WHEN to use this skill
 metadata:
   source-paper: "Paper Title"
 ---
 
-## When to use
-
-Brief trigger conditions — when should an agent load this skill?
-
-## Instructions
-
-Step-by-step, actionable guidance. Use numbered steps.
-Include concrete code patterns, algorithms, or formulas where applicable.
-
-## Examples
-
-Concrete code examples demonstrating the technique.
-
-## Pitfalls
-
-Common mistakes to avoid when applying this technique.
+{output_section_headings}
 ```
 
 ## Rules
 
-1. Extract ONLY actionable coding techniques — skip background, related work, \
-and pure theory that has no practical coding application.
-2. Each skill must be SELF-CONTAINED — an agent reading just this skill should \
-be able to apply the technique without reading the paper.
-3. The `name` field must be 1-64 chars, lowercase alphanumeric with single hyphens \
+1. {extraction_focus}
+2. The `name` field must be 1-64 chars, lowercase alphanumeric with single hyphens \
 (no leading/trailing hyphens, no consecutive hyphens). Regex: ^[a-z0-9]+(-[a-z0-9]+)*$
-4. The `description` field must clearly state WHEN an agent should use this skill, \
+3. The `description` field must clearly state WHEN to use this skill, \
 not just what it does. Maximum 200 characters.
-5. Keep each skill focused on ONE technique. If a paper has multiple distinct \
+4. Keep each skill focused on ONE technique. If a paper has multiple distinct \
 techniques, create multiple skills.
-6. Prefer code examples over prose. Show, don't just tell.
-7. If a technique is just common knowledge that any competent developer would \
-know, skip it — only extract novel insights.
-8. Keep total body length under 300 lines per skill.
+{rules}
 """
 
-GENERATION_PROMPT = """\
-Analyze the following research paper content and extract actionable coding skills.
+_USER_TEMPLATE = """\
+Analyze the following research paper content and extract actionable skills.
 
 ## Paper Metadata
 Title: {title}
@@ -72,11 +58,10 @@ Title: {title}
 ## Instructions
 
 Extract up to {max_skills} distinct, actionable skills from this paper. \
-Focus on techniques that an AI coding agent could practically apply when writing, \
-reviewing, or debugging code.
+{extraction_focus}
 
 If the paper contains fewer than {max_skills} actionable techniques, produce fewer \
-skills. If the paper is purely theoretical with no practical coding applications, \
+skills. If the paper is purely theoretical with no practical applications, \
 output a single skill with the core insight framed as guidance.
 
 Separate each skill with a line containing exactly: ---SKILL_SEPARATOR---
@@ -84,13 +69,41 @@ Separate each skill with a line containing exactly: ---SKILL_SEPARATOR---
 Output ONLY the skills in the format specified. No preamble, no commentary.
 """
 
+# Pre-built audience prepositions for natural phrasing
+_AUDIENCE_PREPOSITIONS = {
+    "coding-agent": "an AI coding agent",
+    "researcher": "a researcher",
+    "general": "a reader",
+}
+
+
+def _build_system_prompt(profile: AudienceProfile) -> str:
+    """Build the system prompt from a profile."""
+    return _SYSTEM_TEMPLATE.format(
+        audience_label=profile.label,
+        audience_preposition=_AUDIENCE_PREPOSITIONS.get(profile.name, "the reader"),
+        skill_definition=profile.skill_definition,
+        output_section_headings=profile.output_section_headings,
+        extraction_focus=profile.extraction_focus,
+        rules=profile.rules,
+    )
+
 
 def build_generation_messages(
     paper_text: str,
     metadata: dict,
     max_skills: int = 5,
+    audience: Optional[str] = None,
 ) -> list[dict[str, str]]:
-    """Build the messages list for skill generation."""
+    """Build the messages list for skill generation.
+
+    Args:
+        paper_text: Full text of the paper.
+        metadata: Paper metadata dict (title, authors, arxiv_id, doi, abstract).
+        max_skills: Maximum number of skills to extract.
+        audience: Audience profile name (default: coding-agent).
+    """
+    profile = get_profile(audience or DEFAULT_AUDIENCE)
     title = metadata.get("title", "Unknown")
 
     extra_parts = []
@@ -113,14 +126,17 @@ def build_generation_messages(
     if len(content) > 60000:
         content = content[:60000] + "\n\n[... content truncated ...]"
 
-    user_msg = GENERATION_PROMPT.format(
+    system_prompt = _build_system_prompt(profile)
+
+    user_msg = _USER_TEMPLATE.format(
         title=title,
         extra_metadata=extra_metadata,
         content=content,
         max_skills=max_skills,
+        extraction_focus=profile.extraction_focus,
     )
 
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
     ]

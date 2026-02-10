@@ -144,6 +144,12 @@ def generate(
         "-c",
         help="Path to config.yaml",
     ),
+    audience: Optional[str] = typer.Option(
+        None,
+        "--audience",
+        "-a",
+        help="Target audience: 'coding-agent' (default), 'researcher', or 'general'",
+    ),
 ):
     """Generate SKILL.md files from one or more research papers."""
     from .ingest.router import ingest_paper
@@ -151,14 +157,20 @@ def generate(
     from .output.opencode import write_skills, read_existing_skills
     from .evaluate.evaluator import evaluate_skills
     from .evaluate.merger import merge_into_existing, detect_overlaps
+    from .profiles import get_profile, DEFAULT_AUDIENCE
 
     provider = _resolve_provider(provider, config_path)
     llm = _get_provider(provider, model, config_path)
+    audience = audience or _get_config(config_path).audience or DEFAULT_AUDIENCE
+
+    # Validate audience early
+    profile = get_profile(audience)
 
     console.print(
         Panel(
             f"[bold]paper2skills[/bold] v{__version__}\n"
             f"Provider: [cyan]{provider}[/cyan] | Model: [cyan]{llm.model_name}[/cyan]\n"
+            f"Audience: [cyan]{profile.label}[/cyan]\n"
             f"Sources: {len(sources)} | Max skills/paper: {max_skills}",
             title="Generate",
         )
@@ -175,7 +187,7 @@ def generate(
             console.print(f"  Title: [cyan]{metadata.get('title', 'Unknown')}[/cyan]")
             console.print(f"  Text length: {len(text):,} chars")
 
-            skills = generate_skills(text, metadata, llm, max_skills)
+            skills = generate_skills(text, metadata, llm, max_skills, audience)
             all_skills.extend(skills)
 
             for skill in skills:
@@ -219,7 +231,7 @@ def generate(
     # Phase 3: Evaluate (if requested)
     if evaluate and all_skills:
         console.print("\n[bold]Evaluating generated skills...[/bold]")
-        report = evaluate_skills(all_skills, llm)
+        report = evaluate_skills(all_skills, llm, audience)
         report.print_summary()
 
         # Check for overlaps within generated skills
@@ -273,19 +285,30 @@ def evaluate_cmd(
         "-c",
         help="Path to config.yaml",
     ),
+    audience: Optional[str] = typer.Option(
+        None,
+        "--audience",
+        "-a",
+        help="Target audience: 'coding-agent' (default), 'researcher', or 'general'",
+    ),
 ):
     """Evaluate existing SKILL.md files for quality and overlap."""
     from .output.opencode import read_existing_skills
     from .evaluate.evaluator import evaluate_skills
     from .evaluate.merger import detect_overlaps
+    from .profiles import get_profile, DEFAULT_AUDIENCE
 
     provider = _resolve_provider(provider, config_path)
     llm = _get_provider(provider, model, config_path)
+    audience = audience or _get_config(config_path).audience or DEFAULT_AUDIENCE
+
+    profile = get_profile(audience)
 
     console.print(
         Panel(
             f"[bold]paper2skills[/bold] v{__version__}\n"
             f"Provider: [cyan]{provider}[/cyan] | Model: [cyan]{llm.model_name}[/cyan]\n"
+            f"Audience: [cyan]{profile.label}[/cyan]\n"
             f"Skills directory: {skills_dir}",
             title="Evaluate",
         )
@@ -300,7 +323,7 @@ def evaluate_cmd(
     console.print(f"Found [cyan]{len(skills)}[/cyan] skills to evaluate\n")
 
     # Evaluate
-    report = evaluate_skills(skills, llm)
+    report = evaluate_skills(skills, llm, audience)
     report.print_summary()
 
     # Check overlaps

@@ -1,7 +1,14 @@
 """Prompt templates for skill evaluation."""
 
+from __future__ import annotations
+
+from typing import Optional
+
+from ..profiles import AudienceProfile, get_profile, DEFAULT_AUDIENCE
+
 EVALUATION_SYSTEM_PROMPT = """\
-You are an expert at evaluating the quality and usefulness of AI agent skill files. \
+You are an expert at evaluating the quality and usefulness of skill files \
+targeted at {audience_label}. \
 You assess whether a skill definition is actionable, specific, concise, novel, and \
 technically correct.
 
@@ -11,39 +18,41 @@ You will be given a SKILL.md file and must score it on 5 criteria, each from 1-1
 
 You MUST output valid JSON with exactly this structure:
 
-{
-  "scores": {
+{{
+  "scores": {{
     "actionability": <1-10>,
     "specificity": <1-10>,
     "conciseness": <1-10>,
     "novelty": <1-10>,
     "correctness": <1-10>
-  },
+  }},
   "average_score": <float>,
   "verdict": "keep" | "improve" | "discard",
   "summary": "<2-3 sentence assessment>",
   "improvements": ["<specific suggestion 1>", "<specific suggestion 2>"]
-}
+}}
 
 ## Scoring Criteria
 
 1. **Actionability** (1-10): Does the skill contain concrete, step-by-step instructions \
-that an AI coding agent can follow? Code examples? Algorithms? Score 1 if it's pure \
+that {audience_preposition} can follow? Code examples? Algorithms? Score 1 if it's pure \
 theory, 10 if every section has executable guidance.
 
-2. **Specificity** (1-10): Is the description precise enough for an agent to know \
+2. **Specificity** (1-10): Is the description precise enough to know \
 WHEN to load this skill? Does it clearly define its scope? Score 1 if vague/generic, \
-10 if an agent can confidently decide to load or skip it.
+10 if one can confidently decide to load or skip it.
 
 3. **Conciseness** (1-10): What's the signal-to-noise ratio? Score 1 if full of \
 filler and repetition, 10 if every line adds value.
 
-4. **Novelty** (1-10): Does it teach something beyond common knowledge that a \
-well-trained LLM would already know? Score 1 if it's just repackaging obvious \
-best practices, 10 if it contains genuinely new techniques or insights.
+4. **Novelty** (1-10): Does it teach something beyond common knowledge? \
+Score 1 if it's just repackaging obvious best practices, \
+10 if it contains genuinely new techniques or insights.
 
-5. **Correctness** (1-10): Are the technical claims, code examples, and \
-algorithms correct? Score 1 if full of errors, 10 if technically sound.
+5. **Correctness** (1-10): Are the technical claims, examples, and \
+procedures correct? Score 1 if full of errors, 10 if technically sound.
+
+{eval_criteria_overrides}
 
 ## Verdict Rules
 
@@ -53,6 +62,13 @@ algorithms correct? Score 1 if full of errors, 10 if technically sound.
 
 Output ONLY the JSON. No preamble, no commentary, no markdown code fences.
 """
+
+# Audience prepositions for natural phrasing in eval prompts
+_EVAL_PREPOSITIONS = {
+    "coding-agent": "an AI coding agent",
+    "researcher": "a researcher",
+    "general": "a reader",
+}
 
 EVALUATION_USER_PROMPT = """\
 Evaluate the following SKILL.md file:
@@ -64,6 +80,17 @@ Description: {description}
 
 {body}
 """
+
+
+def build_evaluation_system_prompt(audience: Optional[str] = None) -> str:
+    """Build the evaluation system prompt for a given audience."""
+    profile = get_profile(audience or DEFAULT_AUDIENCE)
+    preposition = _EVAL_PREPOSITIONS.get(profile.name, "a reader")
+    return EVALUATION_SYSTEM_PROMPT.format(
+        audience_label=profile.label,
+        audience_preposition=preposition,
+        eval_criteria_overrides=profile.eval_criteria_overrides,
+    )
 
 
 OVERLAP_SYSTEM_PROMPT = """\

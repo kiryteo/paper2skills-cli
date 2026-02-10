@@ -103,6 +103,7 @@ class OutputConfig:
 @dataclass
 class Config:
     provider: str = "github"
+    audience: str = ""
     github: GithubConfig = field(default_factory=GithubConfig)
     copilot: CopilotConfig = field(default_factory=CopilotConfig)
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
@@ -137,6 +138,7 @@ class Config:
     def _from_dict(cls, data: dict) -> Config:
         cfg = cls()
         cfg.provider = data.get("provider", cfg.provider)
+        cfg.audience = data.get("audience", cfg.audience)
 
         if "github" in data:
             gh = data["github"]

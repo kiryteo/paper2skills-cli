@@ -175,12 +175,20 @@ def generate_skills(
     metadata: dict,
     provider: BaseLLMProvider,
     max_skills: int = 5,
+    audience: Optional[str] = None,
 ) -> list[GeneratedSkill]:
     """Generate skills from a paper using the LLM provider.
 
+    Args:
+        paper_text: Full text of the paper.
+        metadata: Paper metadata dict.
+        provider: LLM provider to use.
+        max_skills: Maximum number of skills to extract.
+        audience: Audience profile name (default: coding-agent).
+
     Returns a list of parsed and validated GeneratedSkill objects.
     """
-    messages = build_generation_messages(paper_text, metadata, max_skills)
+    messages = build_generation_messages(paper_text, metadata, max_skills, audience)
 
     console.print(f"  Generating skills using [cyan]{provider.model_name}[/cyan]...")
     response = provider.chat(messages, temperature=0.3, max_tokens=4096)

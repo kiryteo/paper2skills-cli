@@ -12,8 +12,8 @@ from rich.table import Table
 from ..generate.generator import GeneratedSkill
 from ..providers.base import BaseLLMProvider
 from .prompts import (
-    EVALUATION_SYSTEM_PROMPT,
     EVALUATION_USER_PROMPT,
+    build_evaluation_system_prompt,
 )
 
 console = Console(stderr=True)
@@ -125,6 +125,7 @@ class EvaluationReport:
 def evaluate_skill(
     skill: GeneratedSkill,
     provider: BaseLLMProvider,
+    audience: Optional[str] = None,
 ) -> SkillScore:
     """Evaluate a single skill using the LLM."""
     user_msg = EVALUATION_USER_PROMPT.format(
@@ -134,7 +135,7 @@ def evaluate_skill(
     )
 
     messages = [
-        {"role": "system", "content": EVALUATION_SYSTEM_PROMPT},
+        {"role": "system", "content": build_evaluation_system_prompt(audience)},
         {"role": "user", "content": user_msg},
     ]
 
@@ -176,6 +177,7 @@ def evaluate_skill(
 def evaluate_skills(
     skills: list[GeneratedSkill],
     provider: BaseLLMProvider,
+    audience: Optional[str] = None,
 ) -> EvaluationReport:
     """Evaluate a list of skills and produce a report."""
     report = EvaluationReport(total_skills=len(skills))
@@ -184,7 +186,7 @@ def evaluate_skills(
         console.print(
             f"  Evaluating skill {i}/{len(skills)}: [cyan]{skill.name}[/cyan]"
         )
-        score = evaluate_skill(skill, provider)
+        score = evaluate_skill(skill, provider, audience)
         report.scores.append(score)
 
         if score.verdict == "keep":
