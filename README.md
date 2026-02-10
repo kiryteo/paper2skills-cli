@@ -7,11 +7,15 @@ Extract structured, reusable skill files from research papers using LLMs.
 ## Features
 
 - **Multiple input sources** — arXiv IDs/URLs, DOIs, local PDFs, plain text/markdown
+- **Enhanced DOI resolution** — Crossref, Semantic Scholar, and Unpaywall fallback chain for maximum full-text coverage
 - **4 LLM providers** — GitHub Copilot, GitHub Models API, OpenAI, and LiteLLM (100+ backends)
 - **Zero-config with Copilot** — authenticate with `paper2skills login` and use your existing GitHub Copilot subscription
+- **Audience profiles** — tailor skill extraction for coding agents, researchers, or a general audience
+- **Custom prompt templates** — override the system prompt with your own `{{variable}}`-based template
+- **4 output formats** — OpenCode `SKILL.md` (default), JSON, YAML, or Markdown
+- **Batch processing** — process a list of papers from a file with `--from-list`
 - **Skill evaluation** — scores generated skills on actionability, specificity, conciseness, novelty, and correctness
 - **Overlap detection & merging** — finds duplicate/overlapping skills using embeddings + LLM analysis and merges them
-- **OpenCode SKILL.md format** — structured YAML frontmatter + markdown body, ready for AI agent consumption
 
 ## Installation
 
@@ -111,6 +115,132 @@ paper2skills generate "arxiv:1706.03762" --no-evaluate
 paper2skills generate "arxiv:2005.14165" --merge-into .opencode/skills/
 ```
 
+## Audience Profiles
+
+Use `--audience` / `-a` to tailor skill extraction for different audiences. The audience affects both the generation prompt (what kind of skills are extracted) and the evaluation criteria.
+
+| Audience | Description |
+|----------|-------------|
+| `coding-agent` | **(default)** Actionable coding techniques for AI agents — code patterns, implementation steps, examples |
+| `researcher` | Methodological recipes, experimental protocols, statistical techniques, parameter choices |
+| `general` | Key insights and practical takeaways in accessible language, minimal jargon |
+
+```bash
+# Generate skills for researchers
+paper2skills generate "arxiv:1706.03762" --audience researcher
+
+# Evaluate with researcher criteria
+paper2skills evaluate .opencode/skills/ -a researcher
+```
+
+The audience is resolved in this order: CLI flag `--audience` > config file `audience` > default (`coding-agent`).
+
+## Custom Prompt Templates
+
+Override the built-in system prompt with `--prompt-template` to control exactly how skills are extracted.
+
+Templates use `{{double_brace}}` placeholders that are filled in with paper metadata:
+
+| Variable | Description |
+|----------|-------------|
+| `{{title}}` | Paper title |
+| `{{authors}}` | Comma-separated author list |
+| `{{arxiv_id}}` | arXiv ID (if applicable) |
+| `{{doi}}` | DOI (if applicable) |
+| `{{abstract}}` | Paper abstract |
+| `{{max_skills}}` | Maximum skills to extract |
+| `{{content}}` | Full paper text |
+
+Example template (`my-prompt.md`):
+
+```markdown
+You are a skill extraction assistant.
+
+Paper: {{title}} by {{authors}}
+
+Extract up to {{max_skills}} practical techniques from this paper.
+Focus on techniques that can be implemented in Python.
+
+For each skill, provide:
+- A kebab-case name
+- A one-line description (max 200 chars)
+- Step-by-step instructions
+
+Paper content:
+{{content}}
+```
+
+```bash
+paper2skills generate "arxiv:1706.03762" --prompt-template my-prompt.md
+```
+
+The template is resolved in this order: CLI flag `--prompt-template` > config file `prompt_template` > built-in audience-based prompt.
+
+## Output Formats
+
+Use `--format` / `-f` to choose between four output formats:
+
+| Format | Flag | Output | Description |
+|--------|------|--------|-------------|
+| OpenCode | `--format opencode` | `skill-name/SKILL.md` | **(default)** One directory per skill with a `SKILL.md` file |
+| JSON | `--format json` | `skills.json` | Single JSON file with all skills as an array |
+| YAML | `--format yaml` | `skills.yaml` | Single YAML file with all skills as a list |
+| Markdown | `--format markdown` | `skills.md` | Single flat Markdown file with tables |
+
+```bash
+# Output as JSON
+paper2skills generate "arxiv:1706.03762" --format json
+
+# Output as YAML
+paper2skills generate "arxiv:1706.03762" -f yaml
+
+# Output as a single Markdown file
+paper2skills generate "arxiv:1706.03762" -f markdown
+```
+
+The format is resolved in this order: CLI flag `--format` > config file `output.format` > default (`opencode`).
+
+> **Note:** Merge operations (`--merge-into`, `merge` command) always use the OpenCode format regardless of the `--format` setting, since they read and write `SKILL.md` files.
+
+## Batch Processing
+
+Process multiple papers from a file using `--from-list`:
+
+```bash
+paper2skills generate --from-list papers.txt
+```
+
+The file contains one paper source per line. Blank lines and `#` comments are ignored:
+
+```text
+# Attention and Transformers
+arxiv:1706.03762
+arxiv:2005.14165  # GPT-3
+
+# Local files
+./papers/my-paper.pdf
+
+# DOIs
+10.1038/s41586-021-03819-2
+```
+
+You can combine `--from-list` with positional arguments:
+
+```bash
+paper2skills generate ./extra-paper.pdf --from-list papers.txt
+```
+
+## DOI Resolution
+
+DOI-based papers are resolved using a multi-source fallback chain for maximum full-text coverage:
+
+1. **Crossref** — fetches metadata (title, authors, abstract) and looks for PDF links via content negotiation
+2. **Semantic Scholar** — queries the Semantic Scholar API for open-access PDF URLs
+3. **Unpaywall** — queries Unpaywall for legal open-access copies
+4. **Abstract-only fallback** — if no full text is found, generates skills from the abstract and metadata alone
+
+This means DOIs work even for papers behind paywalls — the tool will find open-access versions when available.
+
 ## Provider Setup
 
 The provider is auto-detected: if you're logged in to Copilot, it uses Copilot. Otherwise, it falls back to GitHub Models API. You can always override with `--provider`.
@@ -158,6 +288,12 @@ Create a `config.yaml` (or `paper2skills.yaml`) in your working directory or at 
 ```yaml
 provider: copilot
 
+# Target audience for skill extraction
+audience: coding-agent  # "coding-agent", "researcher", or "general"
+
+# Custom prompt template (overrides audience-based prompt)
+# prompt_template: path/to/my-prompt.md
+
 copilot:
   model: gpt-4o
   embedding_model: text-embedding-3-small
@@ -174,6 +310,11 @@ generation:
 evaluation:
   min_score: 5.0
   overlap_threshold: 0.7
+
+# Output format and directory
+output:
+  format: opencode  # "opencode", "json", "yaml", or "markdown"
+  directory: .opencode/skills
 ```
 
 See [`config.example.yaml`](config.example.yaml) for all options.
