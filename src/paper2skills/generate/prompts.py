@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Optional
 
 from ..profiles import AudienceProfile, get_profile, DEFAULT_AUDIENCE
@@ -89,11 +91,65 @@ def _build_system_prompt(profile: AudienceProfile) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Custom prompt template support
+# ---------------------------------------------------------------------------
+
+# Regex for {{variable}} placeholders in custom templates
+_PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+
+# Variables available in custom templates
+TEMPLATE_VARIABLES = (
+    "title",
+    "authors",
+    "arxiv_id",
+    "doi",
+    "abstract",
+    "max_skills",
+    "content",
+)
+
+
+def load_prompt_template(path: Path) -> str:
+    """Load a custom prompt template from a file.
+
+    Raises FileNotFoundError if the file does not exist.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Prompt template not found: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def render_template(template: str, variables: dict[str, str]) -> str:
+    """Render a custom template by substituting {{variable}} placeholders.
+
+    Unknown placeholders are left unchanged.
+    """
+
+    def _replacer(match: re.Match) -> str:
+        key = match.group(1)
+        return variables.get(key, match.group(0))
+
+    return _PLACEHOLDER_RE.sub(_replacer, template)
+
+
+def list_template_variables() -> list[str]:
+    """Return the list of available template variables."""
+    return list(TEMPLATE_VARIABLES)
+
+
+# ---------------------------------------------------------------------------
+# Message builder
+# ---------------------------------------------------------------------------
+
+
 def build_generation_messages(
     paper_text: str,
     metadata: dict,
     max_skills: int = 5,
     audience: Optional[str] = None,
+    prompt_template: Optional[str] = None,
 ) -> list[dict[str, str]]:
     """Build the messages list for skill generation.
 
@@ -102,15 +158,20 @@ def build_generation_messages(
         metadata: Paper metadata dict (title, authors, arxiv_id, doi, abstract).
         max_skills: Maximum number of skills to extract.
         audience: Audience profile name (default: coding-agent).
+        prompt_template: Path to a custom prompt template file. If provided,
+            replaces the system prompt entirely. The template can use
+            {{variable}} placeholders.
     """
     profile = get_profile(audience or DEFAULT_AUDIENCE)
     title = metadata.get("title", "Unknown")
 
+    # Build authors string
+    authors = metadata.get("authors", "")
+    if isinstance(authors, list):
+        authors = ", ".join(authors)
+
     extra_parts = []
-    if metadata.get("authors"):
-        authors = metadata["authors"]
-        if isinstance(authors, list):
-            authors = ", ".join(authors)
+    if authors:
         extra_parts.append(f"Authors: {authors}")
     if metadata.get("arxiv_id"):
         extra_parts.append(f"arXiv: {metadata['arxiv_id']}")
@@ -126,7 +187,21 @@ def build_generation_messages(
     if len(content) > 60000:
         content = content[:60000] + "\n\n[... content truncated ...]"
 
-    system_prompt = _build_system_prompt(profile)
+    # Custom template path — load and render as system prompt
+    if prompt_template:
+        template_text = load_prompt_template(Path(prompt_template))
+        template_vars = {
+            "title": title,
+            "authors": authors,
+            "arxiv_id": metadata.get("arxiv_id", ""),
+            "doi": metadata.get("doi", ""),
+            "abstract": metadata.get("abstract", ""),
+            "max_skills": str(max_skills),
+            "content": content,
+        }
+        system_prompt = render_template(template_text, template_vars)
+    else:
+        system_prompt = _build_system_prompt(profile)
 
     user_msg = _USER_TEMPLATE.format(
         title=title,

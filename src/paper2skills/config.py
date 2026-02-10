@@ -104,6 +104,7 @@ class OutputConfig:
 class Config:
     provider: str = "github"
     audience: str = ""
+    prompt_template: str = ""
     github: GithubConfig = field(default_factory=GithubConfig)
     copilot: CopilotConfig = field(default_factory=CopilotConfig)
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
@@ -139,6 +140,7 @@ class Config:
         cfg = cls()
         cfg.provider = data.get("provider", cfg.provider)
         cfg.audience = data.get("audience", cfg.audience)
+        cfg.prompt_template = data.get("prompt_template", cfg.prompt_template)
 
         if "github" in data:
             gh = data["github"]

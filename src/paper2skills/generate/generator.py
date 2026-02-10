@@ -176,6 +176,7 @@ def generate_skills(
     provider: BaseLLMProvider,
     max_skills: int = 5,
     audience: Optional[str] = None,
+    prompt_template: Optional[str] = None,
 ) -> list[GeneratedSkill]:
     """Generate skills from a paper using the LLM provider.
 
@@ -185,10 +186,13 @@ def generate_skills(
         provider: LLM provider to use.
         max_skills: Maximum number of skills to extract.
         audience: Audience profile name (default: coding-agent).
+        prompt_template: Path to a custom prompt template file.
 
     Returns a list of parsed and validated GeneratedSkill objects.
     """
-    messages = build_generation_messages(paper_text, metadata, max_skills, audience)
+    messages = build_generation_messages(
+        paper_text, metadata, max_skills, audience, prompt_template
+    )
 
     console.print(f"  Generating skills using [cyan]{provider.model_name}[/cyan]...")
     response = provider.chat(messages, temperature=0.3, max_tokens=4096)

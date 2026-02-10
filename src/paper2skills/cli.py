@@ -150,6 +150,11 @@ def generate(
         "-a",
         help="Target audience: 'coding-agent' (default), 'researcher', or 'general'",
     ),
+    prompt_template: Optional[Path] = typer.Option(
+        None,
+        "--prompt-template",
+        help="Path to a custom prompt template file (overrides system prompt)",
+    ),
 ):
     """Generate SKILL.md files from one or more research papers."""
     from .ingest.router import ingest_paper
@@ -163,14 +168,19 @@ def generate(
     llm = _get_provider(provider, model, config_path)
     audience = audience or _get_config(config_path).audience or DEFAULT_AUDIENCE
 
+    # Resolve prompt template: CLI flag > config > None
+    cfg = _get_config(config_path)
+    tpl_path = str(prompt_template) if prompt_template else cfg.prompt_template or None
+
     # Validate audience early
     profile = get_profile(audience)
 
+    tpl_info = f" | Template: [cyan]{tpl_path}[/cyan]" if tpl_path else ""
     console.print(
         Panel(
             f"[bold]paper2skills[/bold] v{__version__}\n"
             f"Provider: [cyan]{provider}[/cyan] | Model: [cyan]{llm.model_name}[/cyan]\n"
-            f"Audience: [cyan]{profile.label}[/cyan]\n"
+            f"Audience: [cyan]{profile.label}[/cyan]{tpl_info}\n"
             f"Sources: {len(sources)} | Max skills/paper: {max_skills}",
             title="Generate",
         )
@@ -187,7 +197,9 @@ def generate(
             console.print(f"  Title: [cyan]{metadata.get('title', 'Unknown')}[/cyan]")
             console.print(f"  Text length: {len(text):,} chars")
 
-            skills = generate_skills(text, metadata, llm, max_skills, audience)
+            skills = generate_skills(
+                text, metadata, llm, max_skills, audience, tpl_path
+            )
             all_skills.extend(skills)
 
             for skill in skills:

@@ -7,6 +7,11 @@ provider: github  # "github", "copilot", "openai", or "litellm"
 # Options: "coding-agent" (default), "researcher", "general"
 audience: coding-agent
 
+# Custom prompt template — overrides the system prompt for generation
+# The file can use {{variable}} placeholders: title, authors, arxiv_id,
+# doi, abstract, max_skills, content
+# prompt_template: path/to/my-prompt.md
+
 # GitHub Models API (models.github.ai) — free tier with GitHub PAT
 github:
   model: openai/gpt-4o
