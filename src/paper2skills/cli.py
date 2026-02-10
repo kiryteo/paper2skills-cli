@@ -94,6 +94,30 @@ def _get_config(config_path: Optional[Path]):
     return Config.load(config_path)
 
 
+def parse_source_list(path: Path) -> list[str]:
+    """Parse a file of paper sources (one per line).
+
+    Blank lines and lines starting with # are ignored.
+    Inline comments (# after a source) are stripped.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Source list file not found: {path}")
+
+    sources: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        # Skip blank lines and full-line comments
+        if not line or line.startswith("#"):
+            continue
+        # Strip inline comments
+        if " #" in line:
+            line = line[: line.index(" #")].strip()
+        if line:
+            sources.append(line)
+
+    return sources
+
+
 # ---------------------------------------------------------------------------
 # generate command
 # ---------------------------------------------------------------------------
@@ -101,9 +125,14 @@ def _get_config(config_path: Optional[Path]):
 
 @app.command()
 def generate(
-    sources: list[str] = typer.Argument(
-        ...,
+    sources: Optional[list[str]] = typer.Argument(
+        None,
         help="Paper sources: PDF paths, arXiv IDs/URLs, DOIs, or text files",
+    ),
+    from_list: Optional[Path] = typer.Option(
+        None,
+        "--from-list",
+        help="File with one paper source per line (# comments, blank lines ignored)",
     ),
     provider: Optional[str] = typer.Option(
         None,
@@ -174,6 +203,21 @@ def generate(
     from .evaluate.merger import merge_into_existing, detect_overlaps
     from .profiles import get_profile, DEFAULT_AUDIENCE
 
+    # Combine positional sources + --from-list sources
+    all_sources = list(sources or [])
+
+    if from_list:
+        list_sources = parse_source_list(from_list)
+        all_sources.extend(list_sources)
+
+    if not all_sources:
+        typer.echo(
+            "Error: no paper sources provided. Pass sources as arguments "
+            "or use --from-list FILE.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     provider = _resolve_provider(provider, config_path)
     llm = _get_provider(provider, model, config_path)
     cfg = _get_config(config_path)
@@ -197,12 +241,13 @@ def generate(
 
     tpl_info = f" | Template: [cyan]{tpl_path}[/cyan]" if tpl_path else ""
     fmt_info = f" | Format: [cyan]{fmt_name}[/cyan]" if fmt_name != "opencode" else ""
+    list_info = f" (from-list: {from_list.name})" if from_list else ""
     console.print(
         Panel(
             f"[bold]paper2skills[/bold] v{__version__}\n"
             f"Provider: [cyan]{provider}[/cyan] | Model: [cyan]{llm.model_name}[/cyan]\n"
             f"Audience: [cyan]{profile.label}[/cyan]{tpl_info}{fmt_info}\n"
-            f"Sources: {len(sources)} | Max skills/paper: {max_skills}",
+            f"Sources: {len(all_sources)}{list_info} | Max skills/paper: {max_skills}",
             title="Generate",
         )
     )
@@ -210,8 +255,8 @@ def generate(
     all_skills = []
 
     # Phase 1: Ingest and generate
-    for i, source in enumerate(sources, 1):
-        console.print(f"\n[bold]Paper {i}/{len(sources)}:[/bold] {source}")
+    for i, source in enumerate(all_sources, 1):
+        console.print(f"\n[bold]Paper {i}/{len(all_sources)}:[/bold] {source}")
 
         try:
             text, metadata = ingest_paper(source)
