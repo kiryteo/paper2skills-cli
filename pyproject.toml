@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "paper2skills"
+version = "1.0.0"
+description = "Generate AI agent skill files from research papers"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "kiryteo", url = "https://github.com/kiryteo"},
+]
+keywords = [
+    "research-papers",
+    "ai-agents",
+    "skill-extraction",
+    "opencode",
+    "arxiv",
+    "llm",
+    "copilot",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "typer[all]>=0.9.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "pymupdf>=1.23.0",
+    "arxiv>=2.0.0",
+    "requests>=2.31.0",
+    "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+litellm = ["litellm>=1.0.0"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+all = ["paper2skills[litellm]"]
+
+[project.urls]
+Homepage = "https://github.com/kiryteo/paper2skills-cli"
+Repository = "https://github.com/kiryteo/paper2skills-cli"
+Issues = "https://github.com/kiryteo/paper2skills-cli/issues"
+
+[project.scripts]
+paper2skills = "paper2skills.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paper2skills"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/paper2skills"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

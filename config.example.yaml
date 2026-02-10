@@ -1,0 +1,44 @@
+# paper2skills configuration
+# Copy this to config.yaml and customize
+
+provider: github  # "github", "copilot", "openai", or "litellm"
+
+# GitHub Models API (models.github.ai) — free tier with GitHub PAT
+github:
+  model: openai/gpt-4o
+  token_env: GITHUB_TOKEN  # env var containing your GitHub PAT (needs models:read scope)
+  embedding_model: openai/text-embedding-3-small
+
+# GitHub Copilot — uses your existing Copilot subscription
+# Authenticate with: paper2skills login
+# Or auto-detects from VS Code Copilot config / GITHUB_COPILOT_TOKEN env var
+copilot:
+  model: gpt-4o
+  embedding_model: text-embedding-3-small
+
+# OpenAI API directly (api.openai.com)
+openai:
+  model: gpt-4o
+  api_key_env: OPENAI_API_KEY  # env var for the API key
+  embedding_model: text-embedding-3-small
+
+# LiteLLM — supports 100+ providers (Anthropic, Ollama, etc.)
+litellm:
+  model: claude-sonnet-4-20250514  # any litellm-compatible model string
+  api_key_env: ANTHROPIC_API_KEY  # env var for the API key
+  embedding_model: text-embedding-3-small
+
+# Generation settings
+generation:
+  max_skills_per_paper: 5  # max number of skills to extract from a single paper
+  max_body_lines: 300  # target max lines for skill body
+
+# Evaluation settings
+evaluation:
+  min_score: 5.0  # minimum average score to keep a skill (1-10)
+  overlap_threshold: 0.7  # similarity threshold for merge suggestions
+
+# Output settings
+output:
+  format: opencode  # "opencode" for now, more formats later
+  directory: .opencode/skills
